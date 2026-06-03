@@ -60,5 +60,5 @@ ax4.set_xlim(-74.05, -73.90); ax4.set_ylim(40.65, 40.85)
 
 plt.suptitle('NYC Yellow Taxi 2015 - Exploratory Data Analysis', fontsize=15, fontweight='bold', y=1.01)
 plt.tight_layout()
-plt.savefig('fig0_eda_overview.png', dpi=150, bbox_inches='tight')
+plt.savefig('figures/fig0_eda_overview.png', dpi=150, bbox_inches='tight')
 print("Saved fig0_eda_overview.png")

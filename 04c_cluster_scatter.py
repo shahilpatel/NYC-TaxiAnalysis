@@ -44,7 +44,7 @@ plt.suptitle('Time-Adaptive Demand Zones (k=20 centroids per period)\n'
              'NYC Yellow Taxi 2015 - zones shift only ~0.5-1 km between periods',
              fontsize=15, fontweight='bold', y=1.0)
 plt.tight_layout()
-plt.savefig('fig2_cluster_scatter_4panel.png', dpi=150, bbox_inches='tight')
+plt.savefig('figures/fig2_cluster_scatter_4panel.png', dpi=150, bbox_inches='tight')
 print("Saved fig2_cluster_scatter_4panel.png")
 
 # overlay: all periods' centroids on one map -> shows them sitting together
@@ -58,5 +58,5 @@ ax.set_title('All four periods overlaid (k=20 each)\nzones cluster in the same M
              fontsize=13)
 ax.legend(); ax.grid(alpha=0.25)
 plt.tight_layout()
-plt.savefig('fig2b_centroid_overlay.png', dpi=150)
+plt.savefig('figures/fig2b_centroid_overlay.png', dpi=150)
 print("Saved fig2b_centroid_overlay.png")

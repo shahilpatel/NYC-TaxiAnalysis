@@ -1,119 +1,166 @@
-# Are Urban Demand Zones Stable? Distributed Spatial Clustering of 142 Million NYC Taxi Trips on Google Cloud
+# Are Urban Demand Zones Stable? Distributed Spatial Clustering of 142 Million NYC Taxi Trips
 
-**PSTAT 135 Final Project — Shahil ([shahil@ucsb.edu](mailto:shahil@ucsb.edu))**
-**Dataset:** `bigquery-public-data.new_york.tlc_yellow_trips_2015` · **Stack:** BigQuery · Dataproc/PySpark · BigQuery ML · NetworkX
+**PSTAT 135 Final Project — Shahil Patel (shahil@ucsb.edu)**  
+**Stack:** BigQuery · Dataproc/PySpark · BigQuery ML · NetworkX  
+**Interactive map:** https://storage.googleapis.com/pstat135-taxi-shahil/viz/index.html  
+**Code:** https://github.com/shahilpatel/NYC-TaxiAnalysis
 
 ---
 
 ## Abstract
 
-Vehicle-routing problems (VRP) are NP-hard, but a common tractable heuristic decomposes a city into demand *zones* and routes within each. A natural hypothesis in operations research is that these zones should be **time-adaptive** — re-optimized for each operational period — because demand geography shifts between morning rush, midday, evening rush, and night. We test this hypothesis empirically at scale: 142,567,774 cleaned 2015 NYC yellow-taxi trips, clustered with distributed K-means (Apache Spark on Google Cloud Dataproc) into 20 zones for each of four time periods, with a full-population routing simulation comparing static vs. time-adaptive zoning. **Contrary to the hypothesis, we find that optimal zones are remarkably stable:** centroids shift only 0.5–1.0 km between periods, and time-adaptive zoning reduces mean dispatch distance by only ~1% (range −1.4% to +2.8%) versus a fixed design. The cause is demand concentration — NYC yellow-cab pickups are so dominated by the Manhattan core that 20 zones cover them well in every period. We complement this with PageRank hub analysis (validating Midtown as the network center) and BigQuery ML demand forecasting (a regularized linear model reaches R²=0.06, a boosted tree R²=0.87). The result is a cautionary, empirically-grounded counterpoint to the assumption that temporal zone adaptation yields large routing gains.
+Vehicle-routing problems are NP-hard, but a standard tractable heuristic decomposes a city into demand zones and routes within each. A natural hypothesis is that these zones should be time-adaptive — re-optimized for each operational period — because demand geography shifts between morning rush, midday, evening rush, and night. We test this empirically at scale: 142,567,774 cleaned 2015 NYC yellow-taxi trips clustered with distributed K-means (PySpark on Google Cloud Dataproc) into 20 zones per time period, with a full-population routing simulation comparing static vs. time-adaptive zoning. Contrary to the hypothesis, optimal zones are remarkably stable — centroids shift only 0.5–1.0 km between periods, and time-adaptive zoning reduces mean dispatch distance by only ~1%. We then extend the study to a controlled 5-arm longitudinal comparison (yellow and green taxis 2015, yellow 2024, Uber/Lyft 2019 and 2024) to ask whether the arrival of rideshare changed this result. The relationship is non-monotone: adaptive gain peaks at intermediate dispersion regimes (Yellow 2024: +9.1%, Green 2015: +7.5%), not at maximum dispersion (Uber/Lyft 2024: −1.5%). The driver is time-volatility of demand, not spatial spread — a cleaner decision rule than the original hypothesis predicted.
 
 ---
 
 ## 1. Introduction
 
-Urban logistics and ride-dispatch operations rest on the vehicle-routing problem, which is NP-hard in general. A standard engineering response is **zone decomposition**: partition the service area into a small number of zones, assign vehicles to zones, and solve a far smaller routing problem within each. The quality of this decomposition hinges on where the zones are placed.
+Urban logistics and ride-dispatch operations rely on zone decomposition to make the vehicle-routing problem tractable: partition the service area into a small number of zones, assign vehicles to zones, and solve a far smaller routing problem within each. The quality of this decomposition depends on zone placement.
 
-It is widely assumed that good zones must be **time-adaptive** — that the partition optimal for the 8 a.m. Financial District commute is wasteful at 2 a.m. when demand migrates to nightlife districts. If true, this motivates time-varying VRP decomposition and dynamic dispatch. **This project asks whether that assumption actually holds for a real, large-scale demand dataset**, and quantifies the routing efficiency at stake.
+It is widely assumed that good zones must be time-adaptive — that the partition optimal for the 8 a.m. commute is wasteful at 2 a.m. when demand migrates to nightlife districts. If true, this motivates time-varying VRP decomposition and dynamic dispatch. This project asks whether that assumption holds for a real, large-scale demand dataset and quantifies the routing efficiency at stake.
 
-Our contribution is threefold:
-1. A reproducible, fully cloud-native pipeline that clusters 142M trips with distributed K-means — an analysis infeasible on a single machine.
-2. A fair, full-population routing simulation (fixed number of zones) measuring the dispatch-distance gain of adaptive vs. static zoning.
-3. An honest, somewhat counterintuitive finding: **zones are stable and adaptivity buys almost nothing** for this dataset, with a clear structural explanation.
+Our contributions:
+1. A reproducible, fully cloud-native pipeline that clusters 142M trips with distributed K-means.
+2. A fair, full-population routing simulation measuring the dispatch-distance gain of adaptive vs. static zoning.
+3. A counterintuitive finding: zones are stable and adaptivity buys almost nothing for concentrated demand.
+4. A controlled 5-arm longitudinal study extending the finding to the rideshare era, identifying time-volatility — not spatial dispersion — as the key variable.
 
 ---
 
 ## 2. Data
 
-**Source.** `bigquery-public-data.new_york.tlc_yellow_trips_2015`, the NYC Taxi & Limousine Commission trip records. 2015 is the last full year of peak yellow-cab dominance before ride-hailing structurally reduced demand, and the highest-volume year with raw pickup/dropoff latitude-longitude (later years publish only zone IDs, which would preclude true spatial clustering).
+**2015 baseline.** `bigquery-public-data.new_york.tlc_yellow_trips_2015`, the NYC TLC trip records. 2015 is the last full year of peak yellow-cab dominance before ride-hailing structurally reduced demand, and the last year with raw pickup/dropoff coordinates (later years publish only zone IDs). After filtering to NYC bounding box, fares $2.50–$100, and distance 0.1–50 mi, we retain **142,567,774 trips** (mean 2.97 mi, $12.79).
 
-**Cleaning.** We retained trips within an NYC bounding box (lat 40.5–40.9, lon −74.3 to −73.7 for both pickup and dropoff), fares \$2.50–\$100, and trip distance 0.1–50 mi, yielding **142,567,774 trips** (Jan 1 – Dec 31 2015; 0 null coordinates; mean 2.97 mi, \$12.79). The cleaned table is 11 columns.
+**5-arm extension.** For the longitudinal study we use:
+- Green boro-taxi 2015: BigQuery public dataset (`tlc_green_trips_2015`), 19.2M trips
+- Yellow taxi 2024: downloaded from NYC TLC, 41M trips
+- Uber/Lyft 2019 (HVFHV): Feb–Mar 2019 snapshot, 44M trips (partial year due to TLC schema drift mid-2019)
+- Uber/Lyft 2024 (HVFHV): full year, 240M trips
 
-**Derived tables (BigQuery SQL).** `zone_demand` (563,696 rows — hourly demand per ~1 km grid cell), `trips_with_period` (142.5M rows, adds `time_period` and `day_type` labels), `od_matrix` (45,477 origin→destination edges with ≥20 trips).
+All arms are mapped to the same 263 TLC zone centroids, making zone counts and geographies directly comparable across modes and years.
 
-**Time periods.** AM_PEAK (7–9 a.m.), MIDDAY (10 a.m.–3 p.m.), PM_PEAK (4–7 p.m.), NIGHT (8 p.m.–6 a.m.). Distribution by volume (Fig. 0): NIGHT is largest (52.3M) with the longest mean trip (3.30 mi — late-night airport/outer-borough runs), AM_PEAK smallest (18.3M).
-
-**Architecture.** Public BigQuery → cleaned `taxi_analysis` dataset → Parquet export to Cloud Storage (293 shards, 2.16 GiB) → Dataproc/PySpark clustering → results back to GCS/BigQuery → figures and an interactive Google Maps page hosted on GCS.
+**Time periods.** AM Peak (7–9 am), Midday (10 am–3 pm), PM Peak (4–7 pm), Night (8 pm–6 am). By volume: Night 52.3M, Midday 41.4M, PM Peak 30.5M, AM Peak 18.3M.
 
 ---
 
 ## 3. Methodology
 
-**Time-stratified K-means (Dataproc/PySpark).** For each period we standardize (pickup_lat, pickup_lon), then fit K-means. Model selection used a silhouette + elbow sweep over k ∈ {10,15,20,25} per period (Fig. 1); silhouette scores were stable (~0.51–0.60), so for the cross-period comparison we **fix k = 20 for every period**. This fixed-k choice is essential: with different k per period, the period with more centroids trivially achieves shorter nearest-centroid distance, confounding any static-vs-adaptive comparison. Clustering ran on a 6-worker `n1-standard-4` cluster.
+**Distributed K-means (Dataproc/PySpark).** For each time period we standardize (pickup_lat, pickup_lon) and fit K-means, sweeping k ∈ {10, 15, 20, 25} and scoring silhouette on a sample. For the cross-period comparison we fix k=20 for every period — essential for a fair comparison, since different k per period trivially gives more centroids shorter nearest-centroid distances, confounding the result.
 
-**Zone-stability metric.** For each pair of periods we compute an average (symmetric) nearest-centroid displacement in kilometers — a Hausdorff-inspired drift measure (Fig. 3): for centroid sets C₁, C₂, ½·(mean over C₁ of min haversine to C₂ + mean over C₂ of min haversine to C₁).
+**Zone-stability metric.** For each pair of periods we compute a symmetric nearest-centroid displacement: for centroid sets C₁, C₂: ½ · (mean over C₁ of min haversine to C₂ + mean over C₂ of min haversine to C₁).
 
-**Routing simulation (the key OR result).** For every one of the 142M trips we compute the haversine distance to its nearest zone centroid under (a) **adaptive** zoning — that period's own k=20 centroids — and (b) **static** zoning — a fixed baseline period's (AM_PEAK) centroids used all day. This was implemented as a vectorized Spark `pandas_udf` broadcasting the ≤20 centroids and computing pairwise haversine inside each Arrow batch, so it scales to the full population rather than a small sample. We report the mean per period and the percentage reduction.
+**Routing simulation.** For every one of the 142M trips we compute haversine distance to the nearest zone centroid under (a) adaptive zoning — that period's own centroids — and (b) static zoning — AM Peak centroids used all day. Implemented as a vectorized Spark `pandas_udf` broadcasting centroids and computing pairwise haversine inside each Arrow batch, scaling to the full population.
 
-**Graph analytics.** From `od_matrix` we build a weighted directed graph (831 nodes, 31,480 edges with ≥50 trips) and compute PageRank (α=0.85) to identify high-centrality hubs (Fig. 5).
+**5-arm analysis.** For the longitudinal study, demand-weighted K-means (k=20, pure numpy, 6 restarts) runs over 263 TLC zone centroids per arm per period. Drift and routing gain are computed identically to the 2015 analysis. The Manhattan-only re-run (restricting all arms to the common footprint) controls for coverage differences between modes.
 
-**Demand forecasting (BigQuery ML).** We predict hourly `trip_count` per grid cell with three models: a regularized linear regression (L1=L2=0.1, the Lecture-7 penalized-regression connection), the same with temporal features one-hot encoded, and a boosted-tree regressor (Fig. 6).
+**Graph analytics.** From the 2015 OD matrix (45,477 edges ≥20 trips) we build a weighted directed graph and compute PageRank (α=0.85).
+
+**Demand forecasting (BigQuery ML).** Three models on hourly grid-cell demand: regularized linear regression (L1=L2=0.1), linear with temporal one-hot features, and a boosted tree.
 
 ---
 
 ## 4. Results
 
 ### 4.1 Exploratory analysis
-Demand follows the expected bimodal weekday rhythm with AM and PM peaks, a Friday/Saturday weekly maximum, and mild seasonal variation across 2015 (Fig. 0). Pickups are overwhelmingly concentrated in Manhattan in every period — already foreshadowing the stability result.
+
+Demand follows a bimodal weekday rhythm with AM and PM peaks, a Friday/Saturday weekly maximum, and mild seasonal variation. Pickups are overwhelmingly concentrated in Manhattan in every period (Fig. 0).
 
 ### 4.2 Temporal clustering
-Per-period K-means produces sensible 20-zone partitions (Fig. 2). Overlaying all four periods' centroids (Fig. 2b) shows them occupying nearly the same Manhattan core — a direct visual of stability.
 
-### 4.3 Zone stability (drift)
-Centroids move only **0.5–1.0 km** between periods (Fig. 3). The largest drift is **MIDDAY ↔ NIGHT = 1.02 km** (midday commerce vs. night nightlife), the smallest PM_PEAK ↔ MIDDAY = 0.52 km. Zones *do* shift, but modestly.
+Per-period K-means produces sensible 20-zone partitions (Fig. 2). Overlaying all four periods' centroids shows them occupying nearly the same Manhattan core — a direct visual of stability.
 
-### 4.4 Key OR result — static vs. adaptive routing
-On the full 142M-trip population, with a fixed 20 zones, time-adaptive zoning barely beats static (Fig. 4):
+### 4.3 Zone stability
 
-| Period | adaptive (km) | static / AM zones (km) | gain |
-|---|---|---|---|
-| AM_PEAK | 0.576 | 0.576 | 0.0% (baseline) |
-| PM_PEAK | 0.556 | 0.571 | +2.8% |
-| MIDDAY | 0.579 | 0.571 | −1.4% |
-| NIGHT | 0.616 | 0.625 | +1.4% |
+Centroids move only **0.5–1.0 km** between periods (Fig. 3). The largest drift is Midday ↔ Night = 1.02 km (midday commerce vs. late-night nightlife districts), the smallest PM Peak ↔ Midday = 0.52 km.
 
-**Average gain ≈ 0.9%.** One period is even slightly negative (within the noise of K-means minimizing squared distance in standardized space versus our mean-haversine metric). **The hypothesized large routing benefit of time-adaptive zoning does not materialize.** The structural reason is demand concentration: with pickups so dominated by the Manhattan core, any reasonable placement of 20 zones covers demand well, so the ~1 km of genuine zone drift is too small to change which zone is nearest for most trips.
+### 4.4 Static vs. adaptive routing — the 2015 result
+
+On the full 142M-trip population with k=20 fixed, time-adaptive zoning barely beats static (Fig. 4):
+
+| Period | Adaptive (km) | Static — AM zones (km) | Gain |
+|--------|--------------|------------------------|------|
+| AM Peak | 0.576 | 0.576 | 0.0% (baseline) |
+| PM Peak | 0.556 | 0.571 | +2.8% |
+| Midday | 0.579 | 0.571 | −1.4% |
+| Night | 0.616 | 0.625 | +1.4% |
+
+**Average gain ≈ 0.9%.** The hypothesized routing benefit of time-adaptive zoning does not materialize. With pickups dominated by the Manhattan core, any reasonable placement of 20 zones covers demand well in every period, so the ~1 km of genuine zone drift is too small to change which zone is nearest for most trips.
 
 ### 4.5 Graph analytics
-PageRank ranks the trip network's top hubs entirely within Midtown Manhattan — (40.76, −73.98) Times Square/Midtown, (40.75, −73.99) Penn Station/Herald Square (Fig. 5). This matches ground truth and validates the OD-graph construction.
+
+PageRank ranks the top hubs entirely within Midtown Manhattan — Times Square / Midtown, Penn Station / Herald Square — validating the OD graph and confirming Midtown as the network center.
 
 ### 4.6 Demand forecasting
-A regularized **linear** model explains only **R²=0.055** (MAE≈390 trips); one-hot encoding the temporal features barely helps (R²=0.059). A **boosted tree** reaches **R²=0.871** (MAE≈92) (Fig. 6). The gap is itself the lesson: demand is a strongly *nonlinear* function of location (the tree splits on lat/lon) and exhibits the bimodal hourly pattern a linear term cannot capture. Tree feature importance is shared roughly equally across longitude, day-of-week, hour, and latitude.
+
+A regularized linear model explains only R²=0.055 (MAE≈390 trips). Boosted tree reaches R²=0.871 (MAE≈92). The gap is the lesson: demand is a strongly nonlinear function of location and the bimodal hourly pattern that a linear term cannot capture. Tree feature importance is shared roughly equally across longitude, day-of-week, hour, and latitude.
+
+### 4.7 The rideshare era — a controlled 5-arm study
+
+The 2015 finding rests on demand concentration. Uber and Lyft fundamentally changed NYC's demand geography, spreading pickups across all five boroughs. We test whether this changes the stability result using a controlled design that separates mode from time.
+
+**Study arms:**
+
+| Arm | Mode | Year | Role |
+|-----|------|------|------|
+| A — Yellow 2015 | Yellow taxi | 2015 | Pre-rideshare baseline |
+| B — Green 2015 | Green boro-taxi | 2015 | Outer-borough taxi |
+| C — Yellow 2024 | Yellow taxi | 2024 | Mode control (same mode, 9 years later) |
+| D — FHV 2019 | Uber/Lyft/Via | 2019 | Early rideshare |
+| E — FHV 2024 | Uber/Lyft/Via | 2024 | Modern rideshare |
+
+**Key comparisons:** A→C isolates the time effect within yellow taxis; C→E isolates the mode/coverage effect within 2024; D→E shows rideshare's own trend.
+
+**Results (Fig. A–D):**
+
+| Arm | Rides | Manhattan % | Radius (km) | Avg drift (km) | Adaptive gain | (Manhattan-only) |
+|-----|-------|-------------|-------------|----------------|---------------|-----------------|
+| Yellow 2015 | 142M | 92% | 3.10 | 0.70 | +0.18% | +2.11% |
+| Green 2015 | 19M | 28% | 6.64 | 1.08 | +7.50% | −8.75% |
+| Yellow 2024 | 41M | 89% | 3.89 | 1.28 | +9.12% | +12.70% |
+| FHV 2019 | 44M | 44% | 7.83 | 1.67 | +4.29% | +2.77% |
+| FHV 2024 | 240M | 39% | 8.39 | 1.48 | −1.53% | +2.06% |
+
+**The relationship is non-monotone.** More spatial dispersion does not mean more adaptive gain. Uber/Lyft 2024 is the most dispersed arm but gains the least (−1.5%). Yellow 2024 is barely more dispersed than Yellow 2015 but gains 50× more (+9.1%).
+
+**Decomposition:**
+- A→C (time within yellow): gain +0.2% → +9.1%, radius 3.1 → 3.9 km. Post-COVID shift patterns made yellow taxi demand more time-volatile even as the geographic footprint barely changed.
+- C→E (mode, same year): gain +9.1% → −1.5%. Rideshare's city-wide uniform spread means static zones already cover everywhere adequately.
+- Manhattan-only control: FHV 2024 gain recovers to +2.1% within the common footprint, confirming the all-NYC result is partly a coverage artifact — but the direction holds.
+
+**Decision rule.** Adaptive zoning pays off when demand is *time-volatile* — concentrated but shifting meaningfully through the day. It does not help when demand is either too concentrated (Yellow 2015) or too uniformly distributed (FHV 2024). The intermediate regimes (Yellow 2024, Green 2015) gain the most.
 
 ---
 
 ## 5. Conclusion
 
-We set out to confirm that urban demand zones should be time-adaptive and to quantify the routing gain. Instead, a rigorous, full-population analysis of 142M trips shows the opposite: **optimal zones are stable** (centroids drift <1 km between periods) and **time-adaptive zoning reduces dispatch distance by only ~1%**. For NYC yellow taxis, static zone decomposition is near-optimal because demand is too geographically concentrated for temporal shifts to matter at practical zone counts. This is a useful, cautionary result for time-varying VRP decomposition: the cost of adopting adaptive zoning may not be repaid in routing efficiency unless demand is far more spatially dispersed (e.g., last-mile delivery across a whole metro, or service in a polycentric city).
+A rigorous, full-population analysis of 142M NYC yellow taxi trips shows optimal zones are stable (centroids drift <1 km) and time-adaptive zoning reduces dispatch distance by only ~1%. The structural cause is demand concentration in the Manhattan core.
 
-**Limitations & future work.** (a) The effect may differ at finer resolution (much larger k) or under a demand-weighted objective; (b) restricting to airport/outer-borough demand — which shifts more by time than the Manhattan core — may reveal where adaptivity does pay off; (c) a cross-year comparison (2014–2017) could track how the ride-hailing disruption reshaped these zones; (d) real-time adaptive zoning via streaming (Cloud Pub/Sub) would extend the dispatch application.
+Extending the analysis to five eras and modes reveals a non-monotone result: the decision to adopt adaptive zoning depends not on how dispersed demand is, but on whether it is *time-volatile*. Yellow taxi demand in 2024 — still Manhattan-heavy but with post-COVID behavioral shifts — gains 9% from adaptive zoning. Uber/Lyft 2024 demand, uniformly distributed city-wide around the clock, gains nothing. The practical decision rule is: adapt when demand is concentrated enough to matter but volatile enough to shift between periods.
 
 ---
 
 ## References
 
-[1] Bramel, J. & Simchi-Levi, D. (1997). *The Logic of Logistics.* Springer.
-[2] Zaharia, M. et al. (2016). Apache Spark: A Unified Engine for Big Data Processing. *CACM* 59(11).
-[3] NYC TLC Trip Record Data. https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-[4] Page, L. et al. (1999). The PageRank Citation Ranking. Stanford TR.
-[5] Ester, M. et al. (1996). DBSCAN. *KDD-96.*
-[6] Tibshirani, R. (1996). Regression Shrinkage and Selection via the Lasso. *JRSS-B* 58(1).
-[7] Agatz, N. et al. (2012). Optimization for Dynamic Ride-Sharing. *Transportation Science* 46(3).
-[8] Google Cloud BigQuery ML Docs. https://cloud.google.com/bigquery/docs/bqml-introduction
-[9] Matter, U. (2024). *Big Data Analytics.* CRC Press.
-[10] Rioux, J. (2022). *Data Analysis with Python and PySpark.* O'Reilly.
+1. Bramel, J. & Simchi-Levi, D. (1997). *The Logic of Logistics.* Springer.
+2. Zaharia, M. et al. (2016). Apache Spark: A Unified Engine for Big Data Processing. *CACM* 59(11).
+3. NYC TLC Trip Record Data. https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+4. Page, L. et al. (1999). The PageRank Citation Ranking. Stanford TR.
+5. Tibshirani, R. (1996). Regression Shrinkage and Selection via the Lasso. *JRSS-B* 58(1).
+6. Agatz, N. et al. (2012). Optimization for Dynamic Ride-Sharing. *Transportation Science* 46(3).
+7. Google Cloud BigQuery ML. https://cloud.google.com/bigquery/docs/bqml-introduction
 
 ---
 
-### Appendix — Figures
-- **Fig. 0** `fig0_eda_overview.png` — hourly/DOW/monthly volume + pickup scatter by period
-- **Fig. 1** `fig1_elbow_silhouette.png` — elbow (WSSSE) + silhouette vs k, per period
-- **Fig. 2** `fig2_cluster_scatter_4panel.png` — 20 zones per period; **Fig. 2b** `fig2b_centroid_overlay.png` — all overlaid
-- **Fig. 3** `fig3_zone_drift.png` — centroid drift heatmap
-- **Fig. 4** `fig4_static_vs_adaptive.png` — routing: adaptive ≈ static
-- **Fig. 5** `fig5_pagerank.png` — top OD hubs (Midtown)
-- **Fig. 6** `fig6_demand_models.png` — BQML model comparison + tree feature importance
-- **Interactive:** https://storage.googleapis.com/pstat135-taxi-shahil/viz/index.html
+## Appendix — Figures
 
-*Code: 03_eda.py · 04_temporal_kmeans.py · 04c_cluster_scatter.py · fig1_silhouette.py · 05_routing_plot.py · 06_zone_drift.py · 07_pagerank.py · 08_bqml_demand.sql · viz/index.html. Full numbers in RESULTS.md.*
+| Figure | Description |
+|--------|-------------|
+| `figures/fig0_eda_overview.png` | Hourly volume, day-of-week, monthly trend, pickup scatter by period |
+| `figures/fig1_elbow_silhouette.png` | WSSSE + silhouette vs k, per period — justifies k=20 |
+| `figures/fig2_cluster_scatter_4panel.png` | 20 zones per period over pickup backdrop |
+| `figures/fig3_zone_drift.png` | Inter-period centroid drift heatmap (0.5–1.0 km) |
+| `figures/fig4_static_vs_adaptive.png` | Routing gain: adaptive ≈ static (~1%) |
+| `figures/figA_era_demand.png` | Demand geography across all 5 arms — the dispersion shift |
+| `figures/figB_era_drift.png` | Zone drift by era |
+| `figures/figC_era_gain.png` | Adaptive gain by era — the 5-arm main finding |
+| `figures/figD_gain_vs_dispersion.png` | Decision rule: gain vs. dispersion, all arms × periods |

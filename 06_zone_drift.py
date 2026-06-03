@@ -49,7 +49,7 @@ sns.heatmap(drift.astype(float), annot=True, fmt=".2f", cmap="YlOrRd", ax=ax,
             linewidths=0.5, cbar_kws={"label": "Avg Centroid Drift (km)"})
 ax.set_title("Zone Drift Between Time Periods\n(km avg centroid displacement)", fontsize=12)
 plt.tight_layout()
-plt.savefig("fig3_zone_drift.png", dpi=150)
+plt.savefig("figures/fig3_zone_drift.png", dpi=150)
 print("\nSaved fig3_zone_drift.png")
 mx = max(pairs, key=lambda pr: drift.loc[pr[0], pr[1]])
 print(f"Largest drift: {mx[0]} vs {mx[1]} = {drift.loc[mx[0], mx[1]]:.2f} km")

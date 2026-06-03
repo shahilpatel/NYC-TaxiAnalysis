@@ -41,7 +41,7 @@ for i, r in df.iterrows():
         ax.annotate(f"-{r['reduction_pct']:.1f}%", xy=(i+w/2, r["adaptive_km"]+0.015),
                     ha="center", color="darkgreen", fontweight="bold", fontsize=10)
 plt.tight_layout()
-plt.savefig("fig4_static_vs_adaptive.png", dpi=150)
+plt.savefig("figures/fig4_static_vs_adaptive.png", dpi=150)
 print("\nSaved fig4_static_vs_adaptive.png")
 print(f"\nHEADLINE: adaptive zones cut dispatch distance by "
       f"{df[df.period!=baseline]['reduction_pct'].mean():.1f}% on average "

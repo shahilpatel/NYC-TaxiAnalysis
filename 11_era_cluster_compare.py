@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, "era_zone_period.csv")
+FIGS = os.path.join(HERE, "figures")
+os.makedirs(FIGS, exist_ok=True)
 PERIODS = ["AM_PEAK", "MIDDAY", "PM_PEAK", "NIGHT"]
 PERIOD_LABEL = {"AM_PEAK": "AM Peak", "MIDDAY": "Midday", "PM_PEAK": "PM Peak", "NIGHT": "Night"}
 ARMS = ["yellow_2015", "green_2015", "yellow_2024", "fhvhv_2019", "fhvhv_2024"]
@@ -182,7 +184,7 @@ def make_figures(res_all, res_man):
         ax[k].set_title(f"{ARM_LABEL[era]}\nManh {arm_manshare(res_all, era)*100:.0f}%  r={arm_avg(res_all, era,'mean_radius_km'):.1f}km", fontsize=10)
         ax[k].set_xlim(-74.05, -73.7); ax[k].set_ylim(40.55, 40.92); ax[k].set_xticks([]); ax[k].set_yticks([])
     fig.suptitle("Pickup demand geography by mode & year (same 263 zones) — the dispersion shift", fontweight="bold")
-    fig.tight_layout(); fig.savefig(os.path.join(HERE, "figA_era_demand.png"), dpi=130); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "figA_era_demand.png"), dpi=130); plt.close(fig)
 
     x = np.arange(len(arms)); wbar = 0.38
     fig, axB = plt.subplots(figsize=(9, 5))
@@ -190,7 +192,7 @@ def make_figures(res_all, res_man):
     axB.bar(x+wbar/2, [arm_drift(res_man, e) for e in arms], wbar, label="Manhattan only", color="#b9c8e8")
     axB.set_xticks(x); axB.set_xticklabels([ARM_LABEL[e] for e in arms]); axB.set_ylabel("avg inter-period zone drift (km)")
     axB.set_title("Do zones move more in the dispersed modern regime?", fontweight="bold"); axB.legend()
-    fig.tight_layout(); fig.savefig(os.path.join(HERE, "figB_era_drift.png"), dpi=130); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "figB_era_drift.png"), dpi=130); plt.close(fig)
 
     fig, axC = plt.subplots(figsize=(9, 5))
     axC.bar(x-wbar/2, [arm_avg(res_all, e, "gain_pct") for e in arms], wbar, label="all NYC", color="#27ae60")
@@ -198,7 +200,7 @@ def make_figures(res_all, res_man):
     axC.axhline(0, color="#888", lw=0.8)
     axC.set_xticks(x); axC.set_xticklabels([ARM_LABEL[e] for e in arms]); axC.set_ylabel("avg adaptive-zoning gain (%)")
     axC.set_title("Does time-adaptive zoning pay off? (controlled across mode/year)", fontweight="bold"); axC.legend()
-    fig.tight_layout(); fig.savefig(os.path.join(HERE, "figC_era_gain.png"), dpi=130); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "figC_era_gain.png"), dpi=130); plt.close(fig)
 
     fig, axD = plt.subplots(figsize=(9, 6.5))
     for res, mk, sc in [(res_all, "o", "all NYC"), (res_man, "s", "Manhattan only")]:
@@ -213,7 +215,7 @@ def make_figures(res_all, res_man):
     axD.set_ylabel("adaptive-zoning gain (%)")
     axD.set_title("Decision rule: adaptive zoning pays off as demand disperses\n(circles = all NYC, squares = Manhattan-only control)", fontweight="bold")
     axD.grid(alpha=0.3); axD.legend(title="arm", fontsize=8)
-    fig.tight_layout(); fig.savefig(os.path.join(HERE, "figD_gain_vs_dispersion.png"), dpi=130); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "figD_gain_vs_dispersion.png"), dpi=130); plt.close(fig)
 
 def write_summary(res_all, res_man):
     arms = [e for e in ARMS if res_all["centroids"].get(e)]
