@@ -13,9 +13,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CSV = os.path.join(HERE, "era_zone_period.csv")
-FIGS = os.path.join(HERE, "figures")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV = os.path.join(ROOT, "era_zone_period.csv")
+FIGS = os.path.join(ROOT, "figures")
 os.makedirs(FIGS, exist_ok=True)
 PERIODS = ["AM_PEAK", "MIDDAY", "PM_PEAK", "NIGHT"]
 PERIOD_LABEL = {"AM_PEAK": "AM Peak", "MIDDAY": "Midday", "PM_PEAK": "PM Peak", "NIGHT": "Night"}
@@ -141,19 +141,19 @@ def main():
         for per in PERIODS:
             if per not in res_all["centroids"].get(era, {}):
                 continue
-            d = os.path.join(HERE, "results", "era_compare", era, per); os.makedirs(d, exist_ok=True)
+            d = os.path.join(ROOT, "results", "era_compare", era, per); os.makedirs(d, exist_ok=True)
             cs = [{"cluster_id": i, "centroid_lat": la, "centroid_lon": lo, "trip_count": int(tc)}
                   for i, (la, lo, tc) in enumerate(res_all["centroids"][era][per])]
             json.dump({"era": era, "period": per, "k": len(cs), "centroids": cs},
                       open(os.path.join(d, "centroids.json"), "w"))
         if res_all["centroids"].get(era):
-            os.makedirs(os.path.join(HERE, "viz", "era"), exist_ok=True)
+            os.makedirs(os.path.join(ROOT, "viz", "era"), exist_ok=True)
             ez = {per: [[round(r.lat, 5), round(r.lon, 5), int(r.trips)]
                         for r in res_all["zones"][era][per].itertuples()]
                   for per in PERIODS if per in res_all["zones"][era]}
             json.dump({"era": era, "label": ARM_LABEL[era],
                        "centroids": {p: res_all["centroids"][era][p] for p in PERIODS if p in res_all["centroids"][era]},
-                       "zones": ez}, open(os.path.join(HERE, "viz", "era", f"{era}.json"), "w"))
+                       "zones": ez}, open(os.path.join(ROOT, "viz", "era", f"{era}.json"), "w"))
 
     metrics_out = {"all": {}, "manhattan": {}}
     for scope, res in [("all", res_all), ("manhattan", res_man)]:
@@ -162,7 +162,7 @@ def main():
                 "manhattan_share": arm_manshare(res, era), "mean_radius_km": arm_avg(res, era, "mean_radius_km"),
                 "avg_drift_km": arm_drift(res, era), "avg_gain_pct": arm_avg(res, era, "gain_pct"),
                 "per_period": res["metrics"].get(era, {})}
-    json.dump(metrics_out, open(os.path.join(HERE, "era_metrics.json"), "w"), indent=2, default=float)
+    json.dump(metrics_out, open(os.path.join(ROOT, "era_metrics.json"), "w"), indent=2, default=float)
 
     make_figures(res_all, res_man)
     write_summary(res_all, res_man)
@@ -238,7 +238,7 @@ def write_summary(res_all, res_man):
         dec.append(f"- D->E rideshare's own trend: gain {g(res_all,'fhvhv_2019'):+.1f}% -> {g(res_all,'fhvhv_2024'):+.1f}%")
     dec.append(f"- Manhattan-only control: FHV'24 gain stays {g(res_man,'fhvhv_2024'):+.1f}% even within the common footprint "
                f"(vs {g(res_all,'fhvhv_2024'):+.1f}% all-NYC).")
-    open(os.path.join(HERE, "era_summary.md"), "w").write("\n".join(lines + dec) + "\n")
+    open(os.path.join(ROOT, "era_summary.md"), "w").write("\n".join(lines + dec) + "\n")
     print("\n".join(lines + dec))
 
 if __name__ == "__main__":

@@ -23,19 +23,23 @@ The relationship is non-monotone. Adaptive zoning helps when demand is **time-vo
 ## Structure
 
 ```
-04_temporal_kmeans.py     PySpark job — K-means clustering on Dataproc
-05_routing_plot.py        static vs adaptive routing distance
-06_zone_drift.py          inter-period centroid displacement
-07_pagerank.py            zone-to-zone flow PageRank
-08_bqml_demand.sql        BigQuery ML demand forecasting
-08_bqml_figures.py        figures from BQML results
-10_era_compare.sql        5-arm aggregation across 263 TLC zones
-11_era_cluster_compare.py weighted k-means + drift + routing gain for all 5 arms
-run_era_pipeline.sh       loads BQ tables, runs SQL, exports, runs analysis
-viz/index.html            interactive Google Maps explorer
+src/
+  01_bigquery_eda.ipynb       exploratory analysis notebook
+  03_eda.py                   EDA figures
+  04_temporal_kmeans.py       PySpark K-means on Dataproc
+  04c_cluster_scatter.py      cluster visualizations
+  05_routing_plot.py          static vs adaptive routing
+  06_zone_drift.py            inter-period centroid drift
+  07_pagerank.py              OD graph PageRank
+  08_bqml_demand.sql          BigQuery ML demand forecasting
+  08_bqml_figures.py          BQML figures
+  10_era_compare.sql          5-arm aggregation across 263 TLC zones
+  11_era_cluster_compare.py   weighted k-means, drift, routing gain for all 5 arms
+  run_era_pipeline.sh         end-to-end pipeline runner
+figures/                      all report figures (fig0–fig4, figA–figD)
+viz/                          interactive Google Maps explorer
+results/                      per-arm per-period centroid JSON files
 ```
-
-Figures `figA`–`figD` correspond to the 5-arm study (§4.8 in the report). Figures `fig0`–`fig6` are from the original 2015 analysis.
 
 ## Setup
 

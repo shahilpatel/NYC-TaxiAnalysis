@@ -37,7 +37,7 @@ bq query --project_id=$P --use_legacy_sql=false --format=pretty \
  UNION ALL SELECT "fhvhv_2024", COUNT(*) FROM `taxi_analysis.fhvhv_2024` ORDER BY tbl'
 
 echo "running 5-arm aggregation..."
-bq query --project_id=$P --use_legacy_sql=false --format=none < 10_era_compare.sql
+bq query --project_id=$P --use_legacy_sql=false --format=none < src/10_era_compare.sql
 
 echo "Manhattan share by arm:"
 bq query --project_id=$P --use_legacy_sql=false --format=pretty \
@@ -52,5 +52,5 @@ bq query --project_id=$P --use_legacy_sql=false --format=csv --max_rows=20000 \
 echo "rows: $(wc -l < era_zone_period.csv)"
 
 echo "running analysis..."
-python3 11_era_cluster_compare.py
+python3 src/11_era_cluster_compare.py
 echo "done."
