@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<!--
+  NYC Taxi Temporal Demand Zones — interactive explorer.
+  Loads results/temporal_kmeans/<PERIOD>/centroids.json (k=20 zone centroids per
+  time period) from the public GCS bucket and renders them three ways:
+    * Bubbles  — circles colored by demand intensity, sized by trip volume, ranked.
+    * Heatmap  — volume-weighted demand surface.
+    * Overlay  — all four periods' centroids at once (the stability result).
+
+  SETUP:
+    1. Maps JS API key (with the Visualization library enabled):
+       https://console.cloud.google.com/google/maps-apis/credentials
+    2. Replace the key in the loader <script> at the bottom.
+    3. Publish:
+       gsutil iam ch allUsers:objectViewer gs://pstat135-taxi-shahil
+       gsutil -m setmeta -h "Content-Type:application/json" \
+         gs://pstat135-taxi-shahil/results/temporal_kmeans/*/centroids.json
+       gsutil cp viz/index.html gs://pstat135-taxi-shahil/viz/
+       open https://storage.googleapis.com/pstat135-taxi-shahil/viz/index.html
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NYC Taxi Demand Zones by Time Period (2015)</title>
+  <style>
+    :root {
+      --bg: rgba(18,20,26,0.94);
+      --bg-2: #23262f;
+      --bg-3: #2d313b;
+      --line: #34384420;
+      --text: #e9eaed;
+      --muted: #9aa0a6;
+      --accent: #4c8dff;
+    }
+    html, body { height: 100%; margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #map { height: 100%; }
+
+    .panel {
+      position: absolute; z-index: 5;
+      background: var(--bg); color: var(--text);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.55);
+      backdrop-filter: blur(8px);
+    }
+
+    /* ---- control panel (left) ---- */
+    #panel { top: 16px; left: 16px; width: 296px; padding: 18px 18px 16px; }
+    #panel h1 { font-size: 17px; margin: 0 0 3px; letter-spacing: .2px; }
+    #panel .sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.45; }
+
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 14px 0 7px; }
+
+    .period-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .period-btn {
+      padding: 9px 10px; border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 9px; font-size: 13px; cursor: pointer; text-align: left;
+      background: var(--bg-2); color: var(--text); transition: all .15s; line-height: 1.2;
+    }
+    .period-btn .t { font-weight: 600; display: block; }
+    .period-btn .h { font-size: 10.5px; color: var(--muted); }
+    .period-btn:hover { background: var(--bg-3); }
+    .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .period-btn.active .h { color: #dce8ff; }
+
+    .seg { display: flex; background: var(--bg-2); border-radius: 9px; padding: 3px; gap: 3px; }
+    .seg button {
+      flex: 1; padding: 7px 4px; border: none; border-radius: 7px; cursor: pointer;
+      background: transparent; color: var(--muted); font-size: 12.5px; transition: all .15s;
+    }
+    .seg button.active { background: var(--bg-3); color: #fff; font-weight: 600; }
+    .seg button:hover:not(.active) { color: var(--text); }
+
+    /* ---- hour scrubber ---- */
+    #hour-control { margin-top: 6px; }
+    .hour-row { display: flex; align-items: center; gap: 10px; }
+    .play {
+      flex: none; width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; font-size: 12px; line-height: 1; display: flex;
+      align-items: center; justify-content: center; transition: background .15s;
+    }
+    .play:hover { background: #3f7ae0; }
+    #hour-slider { flex: 1; -webkit-appearance: none; appearance: none; height: 5px; border-radius: 3px;
+      background: linear-gradient(90deg,#2563eb,#06b6d4,#10b981,#a3e635,#f59e0b,#ef4444); outline: none; }
+    #hour-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+    #hour-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff;
+      border: 2px solid var(--accent); cursor: pointer; }
+    .hour-ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin: 3px 2px 0; }
+
+    #stats { margin-top: 14px; font-size: 12.5px; color: #c8cbd0; line-height: 1.55; }
+    #stats .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    #stats .row:last-child { border-bottom: none; }
+    #stats .row b { color: #fff; font-variant-numeric: tabular-nums; }
+
+    /* ---- legend (bottom-right) ---- */
+    #legend { bottom: 16px; right: 16px; width: 220px; padding: 14px 16px; font-size: 12px; color: #c8cbd0; }
+    #legend .label { margin-top: 0; }
+    .grad { height: 10px; border-radius: 5px; margin: 4px 0 3px;
+      background: linear-gradient(90deg,#2563eb,#10b981,#f59e0b,#ef4444); }
+    .grad-ticks { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+    #legend .periods { display: none; }
+    #legend .periods .pr { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
+    #legend .periods .sw { width: 12px; height: 12px; border-radius: 3px; }
+
+    /* ---- era selector ---- */
+    .era-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .era-btn {
+      padding: 7px 9px; border: 1px solid rgba(255,255,255,0.07); border-radius: 8px;
+      font-size: 11.5px; cursor: pointer; text-align: left; background: var(--bg-2);
+      color: var(--text); transition: all .15s; line-height: 1.3;
+    }
+    .era-btn .et { font-weight: 600; display: block; }
+    .era-btn .eh { font-size: 10px; color: var(--muted); }
+    .era-btn:hover { background: var(--bg-3); }
+    .era-btn.active { border-color: #a78bfa; background: rgba(167,139,250,0.18); color: #fff; }
+    .era-btn.active .eh { color: #d4c5fd; }
+
+    .credit { margin-top: 12px; font-size: 11px; color: #777c85; line-height: 1.4; }
+    .credit a { color: #8fb4ff; text-decoration: none; }
+
+    .zone-iw { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1b1d22; min-width: 168px; }
+    .zone-iw h3 { margin: 0 0 6px; font-size: 14px; }
+    .zone-iw .k { color: #6b7280; }
+    .zone-iw table { font-size: 12.5px; border-collapse: collapse; }
+    .zone-iw td { padding: 2px 0; }
+    .zone-iw td:last-child { text-align: right; font-weight: 600; padding-left: 18px; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div id="panel" class="panel">
+    <h1>NYC Taxi Demand Zones</h1>
+    <div class="sub">NYC taxi demand, 2015 vs 2024</div>
+
+    <div class="label">Era / mode</div>
+    <div class="era-grid">
+      <button class="era-btn active" id="era-yellow_2015" onclick="switchEra('yellow_2015')"><span class="et">Yellow '15</span><span class="eh">Pre-rideshare · 142M</span></button>
+      <button class="era-btn" id="era-green_2015"  onclick="switchEra('green_2015')"><span class="et">Green '15</span><span class="eh">Boro-taxi · 19M</span></button>
+      <button class="era-btn" id="era-yellow_2024" onclick="switchEra('yellow_2024')"><span class="et">Yellow '24</span><span class="eh">Mode control · 41M</span></button>
+      <button class="era-btn" id="era-fhvhv_2019"  onclick="switchEra('fhvhv_2019')"><span class="et">FHV '19</span><span class="eh">Early rideshare · 44M</span></button>
+      <button class="era-btn" id="era-fhvhv_2024"  onclick="switchEra('fhvhv_2024')"><span class="et">FHV '24</span><span class="eh">Uber/Lyft/Via · 240M</span></button>
+    </div>
+
+    <div class="label">Time period</div>
+    <div class="period-grid">
+      <button class="period-btn" id="btn-AM_PEAK" onclick="switchPeriod('AM_PEAK')"><span class="t">AM Peak</span><span class="h">7&ndash;9 am</span></button>
+      <button class="period-btn" id="btn-MIDDAY"  onclick="switchPeriod('MIDDAY')"><span class="t">Midday</span><span class="h">10 am&ndash;3 pm</span></button>
+      <button class="period-btn" id="btn-PM_PEAK" onclick="switchPeriod('PM_PEAK')"><span class="t">PM Peak</span><span class="h">4&ndash;7 pm</span></button>
+      <button class="period-btn" id="btn-NIGHT"   onclick="switchPeriod('NIGHT')"><span class="t">Night</span><span class="h">8 pm&ndash;6 am</span></button>
+    </div>
+
+    <div class="label">View</div>
+    <div class="seg" id="viewseg">
+      <button id="view-bubbles" class="active" onclick="setView('bubbles')">Bubbles</button>
+      <button id="view-heatmap" onclick="setView('heatmap')">Heatmap</button>
+      <button id="view-overlay" onclick="setView('overlay')">Zone Drift</button>
+      <button id="view-split" onclick="setView('split')">Split</button>
+    </div>
+
+    <div id="hour-control" style="display:none">
+      <div class="label" style="display:flex;justify-content:space-between;align-items:baseline">
+        <span>Hour of day</span><span id="hour-readout" style="color:#fff;letter-spacing:0;text-transform:none;font-size:13px;font-weight:600">8:00</span>
+      </div>
+      <div class="hour-row">
+        <button id="play-btn" class="play" onclick="togglePlay()" title="Play 24-hour animation">&#9654;</button>
+        <input id="hour-slider" type="range" min="0" max="23" value="8" step="1" oninput="setHour(+this.value, true)">
+      </div>
+      <div class="hour-ticks"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>11p</span></div>
+    </div>
+
+    <div id="stats"></div>
+  </div>
+
+  <div id="legend" class="panel">
+    <div id="legend-intensity">
+      <div class="label">Demand intensity</div>
+      <div class="grad"></div>
+      <div class="grad-ticks"><span>low</span><span>trips / zone</span><span>high</span></div>
+    </div>
+    <div class="periods" id="legend-periods">
+      <div class="label">Periods (dot color)</div>
+      <div class="pr"><span class="sw" style="background:#60a5fa"></span> AM Peak (7&ndash;9 am)</div>
+      <div class="pr"><span class="sw" style="background:#facc15"></span> Midday (10 am&ndash;3 pm)</div>
+      <div class="pr"><span class="sw" style="background:#f472b6"></span> PM Peak (4&ndash;7 pm)</div>
+      <div class="pr"><span class="sw" style="background:#a78bfa"></span> Night (8 pm&ndash;6 am)</div>
+      <div class="label" style="margin-top:11px">Line color = how far it moves</div>
+      <div class="grad" style="background:linear-gradient(90deg,#10b981,#f59e0b,#ef4444)"></div>
+      <div class="grad-ticks"><span>stable</span><span>moves a lot</span></div>
+      <div style="margin-top:8px;font-size:11px;color:#9aa0a6;line-height:1.45">Each line traces one demand zone across AM &rarr; Midday &rarr; PM &rarr; Night. Green = barely moves (stable). Red = significant shift between periods.</div>
+    </div>
+    <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,0.06);padding-top:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#23262f;border-radius:9px;padding:9px 10px;border-left:2px solid #fbbf24">
+          <div style="font-size:9px;color:#fbbf24;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Before Uber/Lyft</div>
+          <div style="font-size:18px;font-weight:800;color:#fff;line-height:1">142M</div>
+          <div style="font-size:10px;color:#9aa0a6;margin-top:2px">rides &middot; 92% Manhattan</div>
+        </div>
+        <div style="background:#23262f;border-radius:9px;padding:9px 10px;border-left:2px solid #60a5fa">
+          <div style="font-size:9px;color:#60a5fa;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">After Uber/Lyft</div>
+          <div style="font-size:18px;font-weight:800;color:#fff;line-height:1">240M</div>
+          <div style="font-size:10px;color:#9aa0a6;margin-top:2px">rides &middot; 39% Manhattan</div>
+        </div>
+      </div>
+    </div>
+    <div class="credit">PSTAT 135 &middot; Spark on Dataproc &middot; <a href="https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page" target="_blank" rel="noopener">NYC TLC data</a></div>
+  </div>
+
+  <div id="map"></div>
+  <div id="split-divider" style="display:none;position:absolute;top:0;bottom:0;left:50%;width:4px;background:rgba(255,255,255,0.7);cursor:ew-resize;z-index:8;transform:translateX(-50%);box-shadow:0 0 8px rgba(0,0,0,0.5)">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.6);user-select:none">&#8596;</div>
+  </div>
+  <div id="split-lbl-left" style="display:none;position:absolute;top:20px;left:330px;background:rgba(18,20,26,0.85);color:#fbbf24;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;pointer-events:none;z-index:8;border:1px solid rgba(251,191,36,0.3)">All NYC Taxis 2015</div>
+  <div id="split-lbl-right" style="display:none;position:absolute;top:20px;right:20px;background:rgba(18,20,26,0.85);color:#60a5fa;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;pointer-events:none;z-index:8;border:1px solid rgba(96,165,250,0.3)">Uber/Lyft 2024</div>
+
+  <script>
+    const GCS_BASE = "https://storage.googleapis.com/pstat135-taxi-shahil/results/temporal_kmeans";
+    const HEAT_BASE = "https://storage.googleapis.com/pstat135-taxi-shahil/viz/heat";
+    const ERA_BASE  = "https://storage.googleapis.com/pstat135-taxi-shahil/viz/era";
+    const PERIODS = ['AM_PEAK', 'MIDDAY', 'PM_PEAK', 'NIGHT'];
+    const PERIOD_LABEL = { AM_PEAK:'AM Peak (7–9 am)', MIDDAY:'Midday (10 am–3 pm)', PM_PEAK:'PM Peak (4–7 pm)', NIGHT:'Night (8 pm–6 am)' };
+    // Period dot colors: blue/yellow/pink/purple — intentionally distinct from the
+    // green→amber→red drift-line scale so the two encodings never look the same.
+    const PERIOD_COLOR = { AM_PEAK:'#60a5fa', MIDDAY:'#facc15', PM_PEAK:'#f472b6', NIGHT:'#a78bfa' };
+    const ERA_LABEL = {
+      yellow_2015:'Yellow Taxi 2015 (pre-rideshare baseline)', green_2015:'Green Boro-Taxi 2015',
+      yellow_2024:'Yellow Taxi 2024 (mode control)', fhvhv_2019:'FHV 2019 — early Uber/Lyft',
+      fhvhv_2024:'FHV 2024 — modern Uber/Lyft/Via'
+    };
+
+    let map, infoWindow, heatLayer;
+    let allClusters = {}, eraData = {}, eraZones = {}, hourly = null, overlays = [];
+    let currentPeriod = 'AM_PEAK', currentView = 'bubbles', currentEra = 'yellow_2015';
+    let currentHour = 8, playTimer = null;
+
+    // Split-view state
+    let splitCanvasLeft = null, splitCanvasRight = null, splitFrac = 0.5, splitDragging = false;
+
+    // Particle state (drift particles for Zone Drift view)
+    let particleOv = null, particleAnimId = null, driftParticles = [];
+
+    // ---- sequential intensity scale: blue -> green -> amber -> red ----
+    const SCALE = [[37,99,235],[16,185,129],[245,158,11],[239,68,68]];
+    function intensityColor(t) {
+      t = Math.max(0, Math.min(1, t));
+      const seg = t * (SCALE.length - 1), i = Math.min(Math.floor(seg), SCALE.length - 2), f = seg - i;
+      const a = SCALE[i], b = SCALE[i + 1];
+      const r = Math.round(a[0] + (b[0]-a[0])*f), g = Math.round(a[1] + (b[1]-a[1])*f), bl = Math.round(a[2] + (b[2]-a[2])*f);
+      return `rgb(${r},${g},${bl})`;
+    }
+    const fmt = n => n.toLocaleString('en-US');
+
+    async function initMap() {
+     try {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 40.745, lng: -73.96 }, zoom: 12, mapTypeId: 'roadmap',
+        disableDefaultUI: false, mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+        styles: [
+          {elementType:'geometry',stylers:[{color:'#1b1e24'}]},
+          {elementType:'labels.text.stroke',stylers:[{color:'#1b1e24'}]},
+          {elementType:'labels.text.fill',stylers:[{color:'#8a8f98'}]},
+          {featureType:'administrative',elementType:'geometry.stroke',stylers:[{color:'#3a3f4a'}]},
+          {featureType:'road',elementType:'geometry',stylers:[{color:'#2a2e35'}]},
+          {featureType:'road.highway',elementType:'geometry',stylers:[{color:'#3a3f4a'}]},
+          {featureType:'road',elementType:'labels',stylers:[{visibility:'off'}]},
+          {featureType:'transit',stylers:[{visibility:'off'}]},
+          {featureType:'water',elementType:'geometry',stylers:[{color:'#0f1115'}]},
+          {featureType:'poi',stylers:[{visibility:'off'}]},
+          {featureType:'landscape',elementType:'geometry',stylers:[{color:'#1f232a'}]}
+        ]
+      });
+      infoWindow = new google.maps.InfoWindow();
+
+      // Load baseline era (yellow_2015 from the original temporal_kmeans results)
+      const loaded = await Promise.all(PERIODS.map(async p => {
+        try { return [p, await (await fetch(`${GCS_BASE}/${p}/centroids.json`)).json()]; }
+        catch (e) { console.error(`Failed to load ${p}`, e); return [p, null]; }
+      }));
+      loaded.forEach(([p, d]) => { if (d) { d.centroids.sort((a,b)=>b.trip_count-a.trip_count); allClusters[p] = d; } });
+      eraData['yellow_2015'] = allClusters;   // alias so switchEra works
+
+      if (Object.keys(allClusters).length === 0) { showError('Could not load zone data from Cloud Storage.'); return; }
+      switchPeriod('AM_PEAK');
+
+      // Deep-links: #heatmap, #overlay, #bubbles, #h=14, #era=fhvhv_2024
+      const hash = location.hash.slice(1);
+      if (hash) {
+        const hm = hash.match(/h=(\d{1,2})/); if (hm) currentHour = Math.min(23, +hm[1]);
+        const em = hash.match(/era=([a-z0-9_]+)/);
+        if (em && em[1] !== 'yellow_2015') await switchEra(em[1]);
+        if (/heatmap/.test(hash)) setView('heatmap');
+        else if (/overlay/.test(hash)) setView('overlay');
+      }
+
+      // Split-view divider drag
+      const mapEl = document.getElementById('map');
+      const dividerEl = document.getElementById('split-divider');
+      dividerEl.addEventListener('mousedown', function(e) { splitDragging = true; e.preventDefault(); });
+      document.addEventListener('mousemove', function(e) {
+        if (!splitDragging) return;
+        const rect = mapEl.getBoundingClientRect();
+        splitFrac = Math.max(0.1, Math.min(0.9, (e.clientX - rect.left) / rect.width));
+        dividerEl.style.left = (splitFrac * 100) + '%';
+        if (splitCanvasLeft) splitCanvasLeft.updateFrac(splitFrac);
+        if (splitCanvasRight) splitCanvasRight.updateFrac(splitFrac);
+      });
+      document.addEventListener('mouseup', function() { splitDragging = false; });
+     } catch (e) {
+      console.error(e);
+      showError('Map failed to initialize: ' + e.message);
+     }
+    }
+
+    // ---- Era / mode switching ----
+    async function loadEraData(era) {
+      if (eraData[era]) return eraData[era];
+      try {
+        const d = await (await fetch(`${ERA_BASE}/${era}.json`)).json();
+        // convert to same shape as allClusters: period -> {centroids:[{centroid_lat,centroid_lon,trip_count}]}
+        const built = {};
+        for (const per of PERIODS) {
+          if (!d.centroids || !d.centroids[per]) continue;
+          built[per] = { k: d.centroids[per].length,
+            centroids: d.centroids[per].map(([la, lo, tc], i) =>
+              ({ cluster_id: i, centroid_lat: la, centroid_lon: lo, trip_count: tc }))
+              .sort((a, b) => b.trip_count - a.trip_count) };
+        }
+        eraData[era] = built;
+        return built;
+      } catch(e) { console.error('era load failed', era, e); return null; }
+    }
+
+    async function switchEra(era) {
+      document.querySelectorAll('.era-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById(`era-${era}`);
+      if (btn) btn.classList.add('active');
+      currentEra = era;
+      setStats([['Loading', '…']], `Loading ${ERA_LABEL[era] || era}…`);
+      const data = await loadEraData(era);
+      if (!data) { showError(`Could not load data for ${ERA_LABEL[era] || era}.`); return; }
+      allClusters = data;
+      hourly = null;
+      updatePeriodGridState();   // hour-slider / period-button visibility depends on era
+      if (currentView === 'heatmap' && era !== 'yellow_2015') stopPlay();
+      render();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Custom canvas heatmap. Google removed HeatmapLayer in Maps JS v3.65, so we
+    // render our own as an OverlayView: accumulate radial brushes into an alpha
+    // buffer, then colorize through a 256-entry gradient lookup table.
+    // ---------------------------------------------------------------------------
+    const HEAT_STOPS = [          // position 0..1 -> rgb
+      [0.00, [10, 22, 60]], [0.25, [37, 99, 235]], [0.45, [6, 182, 212]],
+      [0.60, [16, 185, 129]], [0.75, [163, 230, 53]], [0.88, [245, 158, 11]],
+      [1.00, [239, 68, 68]]
+    ];
+    function buildLUT() {
+      const lut = new Uint8ClampedArray(256 * 4);
+      for (let i = 0; i < 256; i++) {
+        const t = i / 255;
+        let a = HEAT_STOPS[0], b = HEAT_STOPS[HEAT_STOPS.length - 1];
+        for (let s = 0; s < HEAT_STOPS.length - 1; s++)
+          if (t >= HEAT_STOPS[s][0] && t <= HEAT_STOPS[s + 1][0]) { a = HEAT_STOPS[s]; b = HEAT_STOPS[s + 1]; break; }
+        const f = (t - a[0]) / Math.max(1e-6, b[0] - a[0]);
+        lut[i*4]   = a[1][0] + (b[1][0]-a[1][0])*f;
+        lut[i*4+1] = a[1][1] + (b[1][1]-a[1][1])*f;
+        lut[i*4+2] = a[1][2] + (b[1][2]-a[1][2])*f;
+        lut[i*4+3] = Math.min(255, 40 + t * 235);   // fade in low end
+      }
+      return lut;
+    }
+    const HEAT_LUT = buildLUT();
+
+    function HeatCanvas(map, radiusMeters) {
+      const overlay = new google.maps.OverlayView();
+      let canvas, points = [], pending = false;
+      overlay.setOptions({ radiusMeters });
+      overlay.onAdd = function () {
+        canvas = document.createElement('canvas');
+        canvas.style.position = 'absolute'; canvas.style.pointerEvents = 'none'; canvas.style.willChange = 'transform';
+        this.getPanes().overlayLayer.appendChild(canvas);
+      };
+      overlay.onRemove = function () { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); canvas = null; };
+      overlay.setPoints = function (pts) { points = pts || []; this.schedule(); };
+      overlay.schedule = function () {
+        if (pending) return; pending = true;
+        requestAnimationFrame(() => { pending = false; this.render(); });
+      };
+      overlay.draw = function () { this.schedule(); };
+      overlay.render = function () {
+        const proj = this.getProjection(); if (!proj || !canvas) return;
+        const b = map.getBounds(); if (!b) return;
+        const ne = proj.fromLatLngToDivPixel(b.getNorthEast());
+        const sw = proj.fromLatLngToDivPixel(b.getSouthWest());
+        const left = Math.floor(sw.x), top = Math.floor(ne.y);
+        const w = Math.max(1, Math.ceil(ne.x - sw.x)), h = Math.max(1, Math.ceil(sw.y - ne.y));
+        canvas.width = w; canvas.height = h;
+        canvas.style.left = left + 'px'; canvas.style.top = top + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+
+        // radius in pixels for the requested ground distance at this latitude/zoom
+        const lat = map.getCenter().lat();
+        const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+        const r = Math.max(8, Math.min(90, this.get('radiusMeters') / mPerPx));
+
+        // pass 1: accumulate grayscale brushes (alpha builds up where demand overlaps)
+        for (const p of points) {
+          const px = proj.fromLatLngToDivPixel(new google.maps.LatLng(p[0], p[1]));
+          const x = px.x - left, y = px.y - top;
+          if (x < -r || y < -r || x > w + r || y > h + r) continue;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          const a = Math.min(1, p[2]);                 // p[2] = pre-normalised intensity 0..1
+          g.addColorStop(0, `rgba(0,0,0,${a})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+        }
+        // pass 2: colorize by accumulated alpha through the gradient LUT
+        const img = ctx.getImageData(0, 0, w, h), d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const al = d[i + 3];
+          if (al === 0) continue;
+          const o = al * 4;
+          d[i] = HEAT_LUT[o]; d[i + 1] = HEAT_LUT[o + 1]; d[i + 2] = HEAT_LUT[o + 2]; d[i + 3] = HEAT_LUT[o + 3];
+        }
+        ctx.putImageData(img, 0, 0);
+      };
+      overlay.setMap(map);
+      return overlay;
+    }
+
+    // Lazily fetch the combined hourly demand grid (used by the heatmap view).
+    async function loadHourly() {
+      if (hourly) return hourly;
+      try { hourly = await (await fetch(`${HEAT_BASE}_hourly.json`)).json(); }
+      catch (e) { console.error('hourly heat load failed', e); hourly = null; }
+      return hourly;
+    }
+
+    function showError(msg) {
+      document.getElementById('stats').innerHTML =
+        `<div style="background:#3a1d22;border:1px solid #f3727220;color:#ffb4ad;padding:9px 11px;border-radius:8px;font-size:12px">${msg}</div>`;
+    }
+
+    function clearOverlays() { overlays.forEach(o => o.setMap(null)); overlays = []; if (heatLayer) heatLayer.setPoints([]); stopDriftParticles(); }
+
+    function switchPeriod(period) {
+      currentPeriod = period;
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`btn-${period}`).classList.add('active');
+      render();
+    }
+
+    function updatePeriodGridState() {
+      const heatNeedsSlider = currentView === 'heatmap' && currentEra === 'yellow_2015';
+      document.querySelector('#panel .period-grid').style.opacity = heatNeedsSlider ? 0.4 : 1;
+      document.querySelector('#panel .period-grid').style.pointerEvents = heatNeedsSlider ? 'none' : 'auto';
+      document.getElementById('hour-control').style.display = heatNeedsSlider ? 'block' : 'none';
+    }
+
+    function setView(view) {
+      if (currentView === 'split' && view !== 'split') stopSplit();
+      currentView = view;
+      if (view !== 'heatmap') stopPlay();
+      ['bubbles','heatmap','overlay','split'].forEach(function(v) {
+        const el = document.getElementById('view-' + v);
+        if (el) el.classList.toggle('active', v === view);
+      });
+      const overlayMode = view === 'overlay';
+      document.getElementById('legend-intensity').style.display = (overlayMode || view === 'split') ? 'none' : 'block';
+      document.getElementById('legend-periods').style.display   = overlayMode ? 'block' : 'none';
+      updatePeriodGridState();
+      render();
+    }
+
+    function zoneInfoHTML(c, rank, n, share, period) {
+      return `<div class="zone-iw">
+        <h3>Zone #${rank} <span class="k">of ${n}</span></h3>
+        <table>
+          <tr><td>Period</td><td>${PERIOD_LABEL[period]}</td></tr>
+          <tr><td>Pickups</td><td>${fmt(c.trip_count)}</td></tr>
+          <tr><td>Share of period</td><td>${(share*100).toFixed(1)}%</td></tr>
+          <tr><td>Centroid</td><td>${c.centroid_lat.toFixed(4)}, ${c.centroid_lon.toFixed(4)}</td></tr>
+        </table></div>`;
+    }
+
+    function render() {
+      clearOverlays();
+      infoWindow.close();
+      if (currentView === 'split') return renderSplit();
+      if (currentView === 'overlay') return renderOverlay();
+      if (currentView === 'heatmap') return renderHeatmap();
+      renderBubbles();
+    }
+
+    function renderBubbles() {
+      const data = allClusters[currentPeriod];
+      if (!data) return;
+      const counts = data.centroids.map(c => c.trip_count);
+      const maxTrips = Math.max(...counts), total = counts.reduce((a,b)=>a+b,0), n = data.centroids.length;
+
+      // Pixel-scaled markers (constant on-screen size) instead of ground circles,
+      // so they don't balloon into each other when you zoom in.
+      data.centroids.forEach((c, i) => {
+        const t = c.trip_count / maxTrips;
+        const color = intensityColor(Math.sqrt(t));
+        const scale = 9 + 26 * Math.sqrt(t);           // marker radius in px
+        const marker = new google.maps.Marker({
+          map, position: { lat: c.centroid_lat, lng: c.centroid_lon },
+          label: { text: String(i + 1), color: '#fff', fontSize: i < 9 ? '12px' : '10px', fontWeight: '700' },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale,
+                  fillColor: color, fillOpacity: 0.78, strokeColor: '#ffffff', strokeOpacity: 0.95, strokeWeight: 1.4 },
+          zIndex: 100 + Math.round(t * 100)            // busiest on top
+        });
+        const html = zoneInfoHTML(c, i + 1, n, c.trip_count / total, currentPeriod);
+        const open = () => { infoWindow.setContent(html); infoWindow.open(map, marker); };
+        marker.addListener('mouseover', () => { marker.setIcon({ ...marker.getIcon(), fillOpacity: 1, strokeWeight: 2.2 }); open(); });
+        marker.addListener('mouseout',  () => marker.setIcon({ ...marker.getIcon(), fillOpacity: 0.78, strokeWeight: 1.4 }));
+        marker.addListener('click', open);
+        overlays.push(marker);
+      });
+
+      const top = data.centroids[0];
+      setStats([
+        ['Era', ERA_LABEL[currentEra] || currentEra],
+        ['Zones (k)', data.k],
+        ['Trips this period', fmt(total)],
+        ['Busiest zone', `${fmt(top.trip_count)} (${(top.trip_count/total*100).toFixed(0)}%)`],
+        ['Mean trips / zone', fmt(Math.round(total / n))]
+      ], 'Marker size &amp; color = pickup volume, numbered by rank. Hover or tap for details.');
+    }
+
+    const HOUR_LABEL = h => { const ap = h < 12 ? 'AM' : 'PM'; const hr = (h % 12) || 12; return `${hr}:00 ${ap}`; };
+
+    async function renderHeatmap() {
+      if (!heatLayer) heatLayer = HeatCanvas(map, 680);
+
+      if (currentEra === 'yellow_2015') {
+        // Full hourly data (24 snapshots) only available for the Yellow 2015 arm.
+        setStats([['Loading', '…']], 'Fetching the hourly demand grid…');
+        const data = await loadHourly();
+        if (currentView !== 'heatmap') return;
+        if (!data) { showError('Could not load the hourly demand grid.'); return; }
+        drawHour();
+        return;
+      }
+
+      // For all other eras, synthesise a heatmap from zone centroid trip counts
+      // for the currently selected time period.
+      const zdata = allClusters[currentPeriod];
+      if (!zdata || !zdata.centroids || !zdata.centroids.length) {
+        showError('No zone data available for this era/period.'); return;
+      }
+      const maxTrips = Math.max(...zdata.centroids.map(c => c.trip_count));
+      const pts = zdata.centroids.map(c =>
+        [c.centroid_lat, c.centroid_lon, Math.pow(c.trip_count / maxTrips, 0.55)]);
+      heatLayer.setPoints(pts);
+      const total = zdata.centroids.reduce((s, c) => s + c.trip_count, 0);
+      setStats([
+        ['Era', ERA_LABEL[currentEra] || currentEra],
+        ['Period', PERIOD_LABEL[currentPeriod]],
+        ['Pickups in period', fmt(total)],
+        ['Zones shown', zdata.centroids.length]
+      ], 'Demand surface built from zone pickup counts for the selected period. Switch periods above to compare demand patterns across the day.');
+    }
+
+    function drawHour() {
+      if (!hourly || currentView !== 'heatmap') return;
+      document.getElementById('hour-slider').value = currentHour;
+      document.getElementById('hour-readout').textContent = HOUR_LABEL(currentHour);
+      const cells = hourly.hours[currentHour] || [];
+      // Scale against the all-day global max with a gamma lift, so the quiet
+      // pre-dawn hours still reveal structure while peaks stay hot.
+      const scale = hourly.global_max;
+      heatLayer.setPoints(cells.map(([lat, lon, w]) => [lat, lon, Math.pow(w / scale, 0.55)]));
+
+      const total = hourly.hour_total[currentHour] || 0;
+      const peak = cells.length ? Math.max(...cells.map(c => c[2])) : 0;
+      const share = total / Object.values(hourly.hour_total).reduce((a,b)=>a+b,0) * 100;
+      setStats([
+        ['Hour', HOUR_LABEL(currentHour)],
+        ['Pickups this hour', fmt(total)],
+        ['Share of day', `${share.toFixed(1)}%`],
+        ['Active cells', fmt(cells.length)]
+      ], 'Live demand surface at ~1 km resolution. Drag the slider or press play to watch the city\'s 24-hour pulse.');
+    }
+
+    function setHour(h, fromUser) {
+      currentHour = ((h % 24) + 24) % 24;
+      document.getElementById('hour-slider').value = currentHour;
+      document.getElementById('hour-readout').textContent = HOUR_LABEL(currentHour);
+      if (fromUser) stopPlay();
+      drawHour();
+    }
+
+    function togglePlay() { playTimer ? stopPlay() : startPlay(); }
+    function startPlay() {
+      const btn = document.getElementById('play-btn');
+      btn.innerHTML = '&#10073;&#10073;'; btn.title = 'Pause';
+      playTimer = setInterval(() => setHour(currentHour + 1, false), 850);
+    }
+    function stopPlay() {
+      if (!playTimer) return;
+      clearInterval(playTimer); playTimer = null;
+      const btn = document.getElementById('play-btn');
+      btn.innerHTML = '&#9654;'; btn.title = 'Play 24-hour animation';
+    }
+
+    // Great-circle distance in km.
+    function haversine(la1, lo1, la2, lo2) {
+      const R = 6371, p = Math.PI / 180;
+      const dLa = (la2-la1)*p, dLo = (lo2-lo1)*p;
+      const a = Math.sin(dLa/2)**2 + Math.cos(la1*p)*Math.cos(la2*p)*Math.sin(dLo/2)**2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+    const nearestTo = (cands, lat, lon) =>
+      cands.reduce((best, c) => {
+        const d = haversine(lat, lon, c.centroid_lat, c.centroid_lon);
+        return d < best.d ? { c, d } : best;
+      }, { c: null, d: Infinity });
+    // stable(green) -> mover(red), so the eye finds the few zones that actually move.
+    function driftColor(km) {
+      const t = Math.min(1, km / 1.6);
+      const stops = [[16,185,129],[245,158,11],[239,68,68]];
+      const seg = t * 2, i = Math.min(1, Math.floor(seg)), f = seg - i, a = stops[i], b = stops[i+1];
+      return `rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`;
+    }
+
+    // Draw drift paths for the current era's data set.
+    function drawDriftPaths(clusters, dashed, onHover) {
+      const anchor = clusters[currentPeriod];
+      if (!anchor) return { avg: 0, max: 0, n: 0 };
+      const startIdx = PERIODS.indexOf(currentPeriod);
+      const traversal = [...PERIODS.slice(startIdx), ...PERIODS.slice(0, startIdx)];
+      let driftSum = 0, driftN = 0, maxDrift = 0;
+
+      anchor.centroids.forEach((c, i) => {
+        const pts = [{ p: currentPeriod, lat: c.centroid_lat, lon: c.centroid_lon }];
+        let zoneMax = 0;
+        for (const p of traversal.slice(1)) {
+          const data = clusters[p]; if (!data) continue;
+          const { c: near, d } = nearestTo(data.centroids, c.centroid_lat, c.centroid_lon);
+          if (!near) continue;
+          pts.push({ p, lat: near.centroid_lat, lon: near.centroid_lon });
+          zoneMax = Math.max(zoneMax, d); driftSum += d; driftN++;
+        }
+        maxDrift = Math.max(maxDrift, zoneMax);
+        const col = driftColor(zoneMax);
+        const icons = dashed
+          ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '10px' },
+             { icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.2, strokeColor: col }, offset: '100%' }]
+          : [{ icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.4, strokeColor: col }, offset: '100%' }];
+        overlays.push(new google.maps.Polyline({
+          map, path: pts.map(q => ({ lat: q.lat, lng: q.lon })),
+          strokeColor: col, strokeOpacity: dashed ? 0 : 0.85, strokeWeight: dashed ? 0 : 2.5,
+          zIndex: dashed ? 30 : 40, icons
+        }));
+        pts.forEach(q => overlays.push(new google.maps.Marker({
+          map, position: { lat: q.lat, lng: q.lon }, zIndex: dashed ? 50 : 60,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: q.p === currentPeriod ? 5 : 3.5,
+                  fillColor: PERIOD_COLOR[q.p], fillOpacity: dashed ? 0.55 : 1,
+                  strokeColor: '#11141a', strokeWeight: 1 }
+        })));
+        if (onHover) {
+          const dot = overlays[overlays.length - pts.length];
+          dot.addListener('mouseover', () => { onHover(i, c, zoneMax, pts.length); });
+        }
+      });
+      return { avg: driftN ? driftSum / driftN : 0, max: maxDrift, n: anchor.centroids.length };
+    }
+
+    // Zone Drift: anchor on the selected period, trace through remaining periods.
+    function renderOverlay() {
+      if (!allClusters[currentPeriod]) { showError(`No zones loaded for ${PERIOD_LABEL[currentPeriod]}.`); return; }
+      const startIdx = PERIODS.indexOf(currentPeriod);
+      const traversal = [...PERIODS.slice(startIdx), ...PERIODS.slice(0, startIdx)];
+
+      const result = drawDriftPaths(allClusters, false, (i, c, km, nPts) => {
+        const html = `<div class="zone-iw"><h3>Zone #${i + 1}</h3><table>
+          <tr><td>Anchor</td><td>${PERIOD_LABEL[currentPeriod].split(' (')[0]}</td></tr>
+          <tr><td>Max drift</td><td>${km.toFixed(2)} km</td></tr>
+          <tr><td>Pickups</td><td>${fmt(c.trip_count)}</td></tr>
+          <tr><td>Stability</td><td>${km < 0.8 ? 'stable' : km < 1.3 ? 'shifts a little' : 'mover'}</td></tr>
+          </table></div>`;
+        infoWindow.setContent(html); infoWindow.open(map, overlays[overlays.length - nPts]);
+      });
+
+      const periodNames = traversal.map(p => PERIOD_LABEL[p].split(' (')[0]).join(' -> ');
+      setStats([
+        ['Anchor period', PERIOD_LABEL[currentPeriod].split(' (')[0]],
+        ['Zones traced', result.n],
+        ['Avg drift', result.avg.toFixed(2) + ' km'],
+        ['Largest drift', result.max.toFixed(2) + ' km']
+      ], 'Paths: ' + periodNames + '. Green line = stable zone, red = mover. Dots colored by period (legend). Hover a dot for details.');
+
+      // launch drift particles: anchor centroid -> last traversal centroid
+      var driftPts = [];
+      var lastPer = traversal[traversal.length - 1];
+      var anchorData = allClusters[currentPeriod];
+      var lastData = allClusters[lastPer];
+      if (anchorData && lastData) {
+        anchorData.centroids.forEach(function(c) {
+          var near = nearestTo(lastData.centroids, c.centroid_lat, c.centroid_lon);
+          if (!near.c) return;
+          var km = haversine(c.centroid_lat, c.centroid_lon, near.c.centroid_lat, near.c.centroid_lon);
+          driftPts.push({ sLat: c.centroid_lat, sLon: c.centroid_lon,
+                          tLat: near.c.centroid_lat, tLon: near.c.centroid_lon,
+                          color: driftColor(km) });
+        });
+      }
+      launchDriftParticles(driftPts);
+    }
+
+    function setStats(rows, note) {
+      document.getElementById('stats').innerHTML =
+        rows.map(function(kv) { return '<div class="row"><span>' + kv[0] + '</span><b>' + kv[1] + '</b></div>'; }).join('') +
+        '<div style="margin-top:10px;font-size:11.5px;color:#9aa0a6;line-height:1.45">' + note + '</div>';
+    }
+
+    // ---- Feature A: Split-screen BubbleCanvas ----
+    function BubbleCanvas(map, side) {
+      var ov = new google.maps.OverlayView();
+      var cv, zones = [], frac = 0.5;
+      ov.onAdd = function() {
+        cv = document.createElement('canvas');
+        cv.style.cssText = 'position:absolute;pointer-events:none;';
+        this.getPanes().overlayLayer.appendChild(cv);
+      };
+      ov.onRemove = function() { if (cv && cv.parentNode) cv.parentNode.removeChild(cv); };
+      ov.draw = function() { this.render(); };
+      ov.setData = function(z, f) { zones = z || []; frac = f; this.render(); };
+      ov.updateFrac = function(f) { frac = f; this.render(); };
+      ov.render = function() {
+        var proj = this.getProjection();
+        if (!proj || !cv || !zones.length) return;
+        var b = map.getBounds(); if (!b) return;
+        var ne = proj.fromLatLngToDivPixel(b.getNorthEast());
+        var sw = proj.fromLatLngToDivPixel(b.getSouthWest());
+        var lft = Math.floor(sw.x), top2 = Math.floor(ne.y);
+        var w = Math.max(1, Math.ceil(ne.x - sw.x)), h = Math.max(1, Math.ceil(sw.y - ne.y));
+        cv.width = w; cv.height = h;
+        cv.style.left = lft + 'px'; cv.style.top = top2 + 'px';
+        var ctx = cv.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        var divX = w * frac;
+        ctx.save();
+        ctx.beginPath();
+        if (side === 'left') ctx.rect(0, 0, divX, h);
+        else ctx.rect(divX, 0, w - divX, h);
+        ctx.clip();
+        var maxW = Math.max(1, Math.max.apply(null, zones.map(function(z) { return z.weight; })));
+        zones.forEach(function(z) {
+          var px = proj.fromLatLngToDivPixel(new google.maps.LatLng(z.lat, z.lon));
+          var x = px.x - lft, y = px.y - top2;
+          var t = z.weight / maxW;
+          var r = 5 + 18 * Math.sqrt(t);
+          var col = intensityColor(Math.sqrt(t));
+          ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832);
+          ctx.fillStyle = col.replace(')', ',0.72)').replace('rgb', 'rgba');
+          ctx.fill();
+          ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.stroke();
+        });
+        ctx.restore();
+      };
+      ov.setMap(map);
+      return ov;
+    }
+
+    async function renderSplit() {
+      clearOverlays();
+      var res = await Promise.all([loadEraData('yellow_2015'), loadEraData('green_2015'), loadEraData('fhvhv_2024')]);
+      var d15 = res[0], d_green = res[1], d24 = res[2];
+      if (currentView !== 'split') return;
+      document.getElementById('split-divider').style.display = 'block';
+      document.getElementById('split-lbl-left').style.display = 'block';
+      document.getElementById('split-lbl-right').style.display = 'block';
+      if (!splitCanvasLeft) splitCanvasLeft = BubbleCanvas(map, 'left');
+      if (!splitCanvasRight) splitCanvasRight = BubbleCanvas(map, 'right');
+      var z15 = (d15 && d15[currentPeriod] && d15[currentPeriod].centroids) || [];
+      var z_green = (d_green && d_green[currentPeriod] && d_green[currentPeriod].centroids) || [];
+      var z24 = (d24 && d24[currentPeriod] && d24[currentPeriod].centroids) || [];
+      var leftZones = z15.concat(z_green).map(function(c) {
+        return { lat: c.centroid_lat, lon: c.centroid_lon, weight: c.trip_count };
+      });
+      var rightZones = z24.map(function(c) {
+        return { lat: c.centroid_lat, lon: c.centroid_lon, weight: c.trip_count };
+      });
+      splitCanvasLeft.setData(leftZones, splitFrac);
+      splitCanvasRight.setData(rightZones, splitFrac);
+      setStats([
+        ['Left side', 'All NYC taxis 2015 — yellow + green cab combined, 161M rides'],
+        ['Right side', 'Uber/Lyft 2024 — 240M rides, 39% Manhattan']
+      ], 'Drag the white divider left or right to compare. Switch time periods to see how both eras shift through the day.');
+    }
+
+    function stopSplit() {
+      document.getElementById('split-divider').style.display = 'none';
+      document.getElementById('split-lbl-left').style.display = 'none';
+      document.getElementById('split-lbl-right').style.display = 'none';
+      // Detach canvases from the map so they stop drawing entirely
+      if (splitCanvasLeft) { splitCanvasLeft.setMap(null); splitCanvasLeft = null; }
+      if (splitCanvasRight) { splitCanvasRight.setMap(null); splitCanvasRight = null; }
+    }
+
+    // ---- Drift particle animation for Zone Drift view ----
+    function stopDriftParticles() {
+      if (particleAnimId) { cancelAnimationFrame(particleAnimId); particleAnimId = null; }
+      if (particleOv && particleOv.pEl) {
+        var ctx = particleOv.pEl.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, particleOv.pEl.width, particleOv.pEl.height);
+      }
+    }
+
+    function launchDriftParticles(pts) {
+      stopDriftParticles();
+      if (!pts || !pts.length) return;
+      if (!particleOv) {
+        particleOv = new google.maps.OverlayView();
+        particleOv.pEl = null;
+        particleOv.onAdd = function() {
+          var el = document.createElement('canvas');
+          el.style.cssText = 'position:absolute;pointer-events:none;';
+          this.getPanes().overlayLayer.appendChild(el);
+          this.pEl = el;
+        };
+        particleOv.draw = function() {};
+        particleOv.setMap(map);
+      }
+      driftParticles = pts.map(function(p) {
+        return { sLat: p.sLat, sLon: p.sLon, tLat: p.tLat, tLon: p.tLon,
+                 prog: Math.random(), spd: 0.006 + Math.random() * 0.005, color: p.color };
+      });
+      (function tick() {
+        if (currentView !== 'overlay') return;
+        particleAnimId = requestAnimationFrame(tick);
+        var ov = particleOv;
+        if (!ov || !ov.pEl || !ov.getProjection) return;
+        var proj = ov.getProjection(); if (!proj) return;
+        var b = map.getBounds(); if (!b) return;
+        var ne = proj.fromLatLngToDivPixel(b.getNorthEast());
+        var sw = proj.fromLatLngToDivPixel(b.getSouthWest());
+        var lft = Math.floor(sw.x), tp = Math.floor(ne.y);
+        var w = Math.max(1, Math.ceil(ne.x - sw.x)), h = Math.max(1, Math.ceil(sw.y - ne.y));
+        ov.pEl.width = w; ov.pEl.height = h;
+        ov.pEl.style.left = lft + 'px'; ov.pEl.style.top = tp + 'px';
+        var ctx = ov.pEl.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        driftParticles.forEach(function(p) {
+          p.prog = (p.prog + p.spd) % 1;
+          var t = p.prog;
+          var lat = p.sLat + (p.tLat - p.sLat) * t;
+          var lon = p.sLon + (p.tLon - p.sLon) * t;
+          var px = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lon));
+          var x = px.x - lft, y = px.y - tp;
+          var alpha = t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1;
+          ctx.beginPath(); ctx.arc(x, y, 2.8, 0, 6.2832);
+          ctx.globalAlpha = alpha * (210 / 255);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+      })();
+    }
+  </script>
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBKy7Fn2IF5QOEZpDVr0tBVtgExVVBUtjI&libraries=visualization&callback=initMap">
+  </script>
+</body>
+</html>

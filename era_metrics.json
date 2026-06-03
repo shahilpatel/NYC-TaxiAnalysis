@@ -1,0 +1,446 @@
+{
+  "all": {
+    "yellow_2015": {
+      "manhattan_share": 0.9236167644924832,
+      "mean_radius_km": 3.1003830950206366,
+      "avg_drift_km": 0.704419818858228,
+      "avg_gain_pct": 0.18048193305361443,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 18284704,
+          "manhattan_share": 0.9318485549451607,
+          "entropy": 0.7149360916965969,
+          "mean_radius_km": 3.0255711916336407,
+          "adaptive_km": 0.5035505934233204,
+          "static_km": 0.5035505934233204,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 41399278,
+          "manhattan_share": 0.9340986333143297,
+          "entropy": 0.7009898823204916,
+          "mean_radius_km": 3.04947611624527,
+          "adaptive_km": 0.4925906711824042,
+          "static_km": 0.4873084423569223,
+          "gain_pct": -1.083960047959319
+        },
+        "PM_PEAK": {
+          "trips": 30516735,
+          "manhattan_share": 0.9290552544366231,
+          "entropy": 0.7025554537748847,
+          "mean_radius_km": 3.1621186903476644,
+          "adaptive_km": 0.4778797182137113,
+          "static_km": 0.4908317502761858,
+          "gain_pct": 2.638792632136482
+        },
+        "NIGHT": {
+          "trips": 52304951,
+          "manhattan_share": 0.9092696980062174,
+          "entropy": 0.7171782632273022,
+          "mean_radius_km": 3.164366381855971,
+          "adaptive_km": 0.572702786580757,
+          "static_km": 0.5679721192417967,
+          "gain_pct": -0.8329048519627051
+        }
+      }
+    },
+    "green_2015": {
+      "manhattan_share": 0.2835577964915792,
+      "mean_radius_km": 6.641479963623624,
+      "avg_drift_km": 1.0807318749351662,
+      "avg_gain_pct": 7.498029780306764,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 2028688,
+          "manhattan_share": 0.38758005173787197,
+          "entropy": 0.7458696137885992,
+          "mean_radius_km": 6.8326585251282035,
+          "adaptive_km": 1.0432021518301087,
+          "static_km": 1.0432021518301087,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 4724288,
+          "manhattan_share": 0.35383469424387337,
+          "entropy": 0.739162527281258,
+          "mean_radius_km": 6.7382836961243715,
+          "adaptive_km": 0.9897490143991259,
+          "static_km": 1.0671223650347281,
+          "gain_pct": 7.250654017834611
+        },
+        "PM_PEAK": {
+          "trips": 4703561,
+          "manhattan_share": 0.303692245088349,
+          "entropy": 0.7362923420897887,
+          "mean_radius_km": 6.7579540141426495,
+          "adaptive_km": 1.0130492832397782,
+          "static_km": 1.0979042595859863,
+          "gain_pct": 7.728813838303755
+        },
+        "NIGHT": {
+          "trips": 7770746,
+          "manhattan_share": 0.2014883770489989,
+          "entropy": 0.7239277742172188,
+          "mean_radius_km": 6.237023619099267,
+          "adaptive_km": 1.0385229344685831,
+          "static_km": 1.221973564215889,
+          "gain_pct": 15.012651265088687
+        }
+      }
+    },
+    "yellow_2024": {
+      "manhattan_share": 0.8872477665934704,
+      "mean_radius_km": 3.8866455222223637,
+      "avg_drift_km": 1.2841567009368058,
+      "avg_gain_pct": 9.123667907198065,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 4389641,
+          "manhattan_share": 0.8875005951511752,
+          "entropy": 0.7199557244189707,
+          "mean_radius_km": 3.7954028937269944,
+          "adaptive_km": 0.6779331918408618,
+          "static_km": 0.6779331918408618,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 13168275,
+          "manhattan_share": 0.8907942763953517,
+          "entropy": 0.6994996919709904,
+          "mean_radius_km": 3.7266260364394785,
+          "adaptive_km": 0.5848377299472561,
+          "static_km": 0.612840526556996,
+          "gain_pct": 4.5693447799646245
+        },
+        "PM_PEAK": {
+          "trips": 10894353,
+          "manhattan_share": 0.8975193845839216,
+          "entropy": 0.6941910640117088,
+          "mean_radius_km": 3.823853209046529,
+          "adaptive_km": 0.5386220262236591,
+          "static_km": 0.6003789866533958,
+          "gain_pct": 10.286329435675206
+        },
+        "NIGHT": {
+          "trips": 12575752,
+          "manhattan_share": 0.8745476214861744,
+          "entropy": 0.7045410662837901,
+          "mean_radius_km": 4.200699949676452,
+          "adaptive_km": 0.554815954076085,
+          "static_km": 0.7080255940589606,
+          "gain_pct": 21.638997413152435
+        }
+      }
+    },
+    "fhvhv_2019": {
+      "manhattan_share": 0.4399417536840022,
+      "mean_radius_km": 7.830482675646744,
+      "avg_drift_km": 1.6683646529692047,
+      "avg_gain_pct": 4.287589091914383,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 5970768,
+          "manhattan_share": 0.3989036251282917,
+          "entropy": 0.9414411817453425,
+          "mean_radius_km": 8.316771746205983,
+          "adaptive_km": 1.8681095105585788,
+          "static_km": 1.8681095105585788,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 11327056,
+          "manhattan_share": 0.42491544139977766,
+          "entropy": 0.9363665272566336,
+          "mean_radius_km": 7.971497983531599,
+          "adaptive_km": 1.756744800284095,
+          "static_km": 1.8205384460854552,
+          "gain_pct": 3.5041086849074823
+        },
+        "PM_PEAK": {
+          "trips": 10277977,
+          "manhattan_share": 0.4651954368062898,
+          "entropy": 0.9257901262900229,
+          "mean_radius_km": 7.566295241512417,
+          "adaptive_km": 1.6436614627602635,
+          "static_km": 1.7741216811950336,
+          "gain_pct": 7.353510180141261
+        },
+        "NIGHT": {
+          "trips": 16545101,
+          "manhattan_share": 0.4493509589334027,
+          "entropy": 0.9166764932658219,
+          "mean_radius_km": 7.467365731336978,
+          "adaptive_km": 1.6752197822916048,
+          "static_km": 1.7877160613226137,
+          "gain_pct": 6.292737502608792
+        }
+      }
+    },
+    "fhvhv_2024": {
+      "manhattan_share": 0.3876962022322064,
+      "mean_radius_km": 8.386127281700656,
+      "avg_drift_km": 1.4845944008726029,
+      "avg_gain_pct": -1.5306051593877463,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 33319488,
+          "manhattan_share": 0.3352008590288062,
+          "entropy": 0.9505101649105802,
+          "mean_radius_km": 9.003206576884887,
+          "adaptive_km": 1.8641975303379958,
+          "static_km": 1.8641975303379958,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 64864691,
+          "manhattan_share": 0.37360486308336843,
+          "entropy": 0.9436240947595419,
+          "mean_radius_km": 8.550235886647908,
+          "adaptive_km": 1.8287920720068083,
+          "static_km": 1.8003601385514074,
+          "gain_pct": -1.5792358898968704
+        },
+        "PM_PEAK": {
+          "trips": 53698899,
+          "manhattan_share": 0.39962126597791137,
+          "entropy": 0.9362074994250488,
+          "mean_radius_km": 8.176657519702696,
+          "adaptive_km": 1.7666293984744752,
+          "static_km": 1.7430038276012623,
+          "gain_pct": -1.3554514625321654
+        },
+        "NIGHT": {
+          "trips": 88228232,
+          "manhattan_share": 0.4106229398317763,
+          "entropy": 0.923333526606121,
+          "mean_radius_km": 7.814409143567134,
+          "adaptive_km": 1.73932422214939,
+          "static_km": 1.6855920435265277,
+          "gain_pct": -3.1877332851219498
+        }
+      }
+    }
+  },
+  "manhattan": {
+    "yellow_2015": {
+      "manhattan_share": 1.0,
+      "mean_radius_km": 2.362785935789906,
+      "avg_drift_km": 0.4202782915114069,
+      "avg_gain_pct": 2.1114038620679496,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 17038575,
+          "manhattan_share": 1.0,
+          "entropy": 0.8953284446064349,
+          "mean_radius_km": 2.4239541206462425,
+          "adaptive_km": 0.39418170871406805,
+          "static_km": 0.39418170871406805,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 38671009,
+          "manhattan_share": 1.0,
+          "entropy": 0.8906158862749453,
+          "mean_radius_km": 2.3508272440043556,
+          "adaptive_km": 0.3820590878126639,
+          "static_km": 0.3894172625218159,
+          "gain_pct": 1.8895348042614808
+        },
+        "PM_PEAK": {
+          "trips": 28351733,
+          "manhattan_share": 1.0,
+          "entropy": 0.8920979586852035,
+          "mean_radius_km": 2.365426240454196,
+          "adaptive_km": 0.3648670259917109,
+          "static_km": 0.38687531510780465,
+          "gain_pct": 5.68872922532187
+        },
+        "NIGHT": {
+          "trips": 47559307,
+          "manhattan_share": 1.0,
+          "entropy": 0.8887406829602401,
+          "mean_radius_km": 2.31093613805483,
+          "adaptive_km": 0.3853291337083384,
+          "static_km": 0.3887005332983512,
+          "gain_pct": 0.8673514186884483
+        }
+      }
+    },
+    "green_2015": {
+      "manhattan_share": 1.0,
+      "mean_radius_km": 1.8108006558376184,
+      "avg_drift_km": 0.027550423137811687,
+      "avg_gain_pct": -8.748321411188142,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 786279,
+          "manhattan_share": 1.0,
+          "entropy": 0.5839370877732744,
+          "mean_radius_km": 1.8652340916594674,
+          "adaptive_km": 0.00045136172943566606,
+          "static_km": 0.00045136172943566606,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 1671617,
+          "manhattan_share": 1.0,
+          "entropy": 0.5599903872282984,
+          "mean_radius_km": 1.8381055736417453,
+          "adaptive_km": 0.00038206510907091333,
+          "static_km": 0.0003627302304854476,
+          "gain_pct": -5.330374190094267
+        },
+        "PM_PEAK": {
+          "trips": 1428435,
+          "manhattan_share": 1.0,
+          "entropy": 0.5460471228990013,
+          "mean_radius_km": 1.7510173057862093,
+          "adaptive_km": 0.0004558680614215805,
+          "static_km": 0.00042372186654482353,
+          "gain_pct": -7.586626373306693
+        },
+        "NIGHT": {
+          "trips": 1565715,
+          "manhattan_share": 1.0,
+          "entropy": 0.5391657488401342,
+          "mean_radius_km": 1.7888456522630514,
+          "adaptive_km": 0.0006166031713474347,
+          "static_km": 0.0005050966049110443,
+          "gain_pct": -22.076285081351607
+        }
+      }
+    },
+    "yellow_2024": {
+      "manhattan_share": 1.0,
+      "mean_radius_km": 2.28646464420848,
+      "avg_drift_km": 0.458885603147346,
+      "avg_gain_pct": 12.695288433688422,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 3895809,
+          "manhattan_share": 1.0,
+          "entropy": 0.8822721159546149,
+          "mean_radius_km": 2.357316234461888,
+          "adaptive_km": 0.38388431112018057,
+          "static_km": 0.38388431112018057,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 11730224,
+          "manhattan_share": 1.0,
+          "entropy": 0.8802951750219861,
+          "mean_radius_km": 2.2635325959839387,
+          "adaptive_km": 0.3649153931650523,
+          "static_km": 0.4041735092924914,
+          "gain_pct": 9.7131838739656
+        },
+        "PM_PEAK": {
+          "trips": 9777893,
+          "manhattan_share": 1.0,
+          "entropy": 0.8854782359495416,
+          "mean_radius_km": 2.2547190521112515,
+          "adaptive_km": 0.34526961585352,
+          "static_km": 0.423037008228198,
+          "gain_pct": 18.383117992534615
+        },
+        "NIGHT": {
+          "trips": 10998094,
+          "manhattan_share": 1.0,
+          "entropy": 0.8857442010140141,
+          "mean_radius_km": 2.270290694276841,
+          "adaptive_km": 0.3469469978492589,
+          "static_km": 0.44874388296851536,
+          "gain_pct": 22.684851868253475
+        }
+      }
+    },
+    "fhvhv_2019": {
+      "manhattan_share": 1.0,
+      "mean_radius_km": 3.363309257992081,
+      "avg_drift_km": 0.39887793476118505,
+      "avg_gain_pct": 2.7668041243457835,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 2381761,
+          "manhattan_share": 1.0,
+          "entropy": 0.9562544713736446,
+          "mean_radius_km": 3.5389672662052605,
+          "adaptive_km": 0.4643776590194121,
+          "static_km": 0.4643776590194121,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 4813041,
+          "manhattan_share": 1.0,
+          "entropy": 0.9614757193532386,
+          "mean_radius_km": 3.3561305908817887,
+          "adaptive_km": 0.4754490415682769,
+          "static_km": 0.4846976543491977,
+          "gain_pct": 1.9081199791112886
+        },
+        "PM_PEAK": {
+          "trips": 4781268,
+          "manhattan_share": 1.0,
+          "entropy": 0.9551067711916972,
+          "mean_radius_km": 3.2320696759345213,
+          "adaptive_km": 0.46270551433110463,
+          "static_km": 0.4914762435029183,
+          "gain_pct": 5.853940969100541
+        },
+        "NIGHT": {
+          "trips": 7434557,
+          "manhattan_share": 1.0,
+          "entropy": 0.9440878967915332,
+          "mean_radius_km": 3.326069498946754,
+          "adaptive_km": 0.4717510222414782,
+          "static_km": 0.487876085763159,
+          "gain_pct": 3.305155549171305
+        }
+      }
+    },
+    "fhvhv_2024": {
+      "manhattan_share": 1.0,
+      "mean_radius_km": 3.4570436704581278,
+      "avg_drift_km": 0.3881434339744471,
+      "avg_gain_pct": 2.0612716419667185,
+      "per_period": {
+        "AM_PEAK": {
+          "trips": 11168721,
+          "manhattan_share": 1.0,
+          "entropy": 0.9599994863374122,
+          "mean_radius_km": 3.707124621157971,
+          "adaptive_km": 0.4756157500497792,
+          "static_km": 0.4756157500497792,
+          "gain_pct": 0.0
+        },
+        "MIDDAY": {
+          "trips": 24233764,
+          "manhattan_share": 1.0,
+          "entropy": 0.9622312342702273,
+          "mean_radius_km": 3.4473686021498406,
+          "adaptive_km": 0.4812560988516589,
+          "static_km": 0.4844848746331154,
+          "gain_pct": 0.6664347950803572
+        },
+        "PM_PEAK": {
+          "trips": 21459222,
+          "manhattan_share": 1.0,
+          "entropy": 0.9585261191483943,
+          "mean_radius_km": 3.3486624271002268,
+          "adaptive_km": 0.4688512355823838,
+          "static_km": 0.4832655234284182,
+          "gain_pct": 2.9826849107247546
+        },
+        "NIGHT": {
+          "trips": 36228536,
+          "manhattan_share": 1.0,
+          "entropy": 0.9451383147377728,
+          "mean_radius_km": 3.325019031424473,
+          "adaptive_km": 0.4597736434633808,
+          "static_km": 0.4819226486983262,
+          "gain_pct": 4.595966862061763
+        }
+      }
+    }
+  }
+}

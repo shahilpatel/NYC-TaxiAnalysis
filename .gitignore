@@ -1,0 +1,30 @@
+# credentials
+*.json.key
+*service_account*.json
+*-????????????????????????.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*-env/
+*.egg-info/
+
+# data files (too large, stored in GCS)
+era_zone_period.csv
+data/raw/
+ingest/
+
+# generated HTML report (PDF is checked in instead)
+REPORT.html
+
+# IDE / OS
+.DS_Store
+.idea/
+*.swp
+
+# internal notes
+MORNING_BRIEFING.md
+.claude/
